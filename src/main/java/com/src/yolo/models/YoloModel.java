@@ -12,6 +12,7 @@ import com.src.opencv.md.intf.ModModel;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -57,12 +58,18 @@ public class YoloModel implements ModModel {
     /**
      * @return the net
      */
-    public synchronized Net getNet() {
-
-        if (actNet == numnets) {
-            actNet = 0;
-        }
-        return nets.get(actNet++);
+    public synchronized AbstractMap.SimpleEntry<Net,Boolean> getNet() {
+        AbstractMap.SimpleEntry<Net,Boolean> net=null;
+        while (net==null) {
+            for(AbstractMap.SimpleEntry<Net,Boolean> nett:this.nets){
+               if(!nett.getValue()){
+                   net=nett;
+                   break;
+               } 
+            }
+        }        
+        net.setValue(Boolean.TRUE);
+        return net;
     }
 
     /**
@@ -77,8 +84,10 @@ public class YoloModel implements ModModel {
     private List<item> items;
     
     private int numnets = 1;
-    private List<Net> nets = new ArrayList();
+    private List<AbstractMap.SimpleEntry<Net,Boolean>> nets = new ArrayList();
     private int actNet = 0;
+    
+            
 
     @Override
     public Object getWeightModel() {
@@ -113,9 +122,9 @@ public class YoloModel implements ModModel {
     public void fillNet() {
         nets.clear();
         for (int i = 0; i < this.numnets; i++) {
-            nets.add(Dnn.readNetFromDarknet(this.getConfigModelPath(), (String) this.getWeightModel()));
-            nets.get(i).setPreferableBackend(DNN_BACKEND);
-            nets.get(i).setPreferableTarget(DNN_TARGET);
+            nets.add(new AbstractMap.SimpleEntry<Net,Boolean>(Dnn.readNetFromDarknet(this.getConfigModelPath(), (String) this.getWeightModel()),false));
+            nets.get(i).getKey().setPreferableBackend(DNN_BACKEND);
+            nets.get(i).getKey().setPreferableTarget(DNN_TARGET);
         }
     }
 

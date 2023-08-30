@@ -20,6 +20,7 @@ import com.src.yolo.models.YoloModel;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -66,16 +67,17 @@ public class SRCYolo extends ModeloGrafico {
     }
 
     @Override
-    public List<Annotation> detectObjects(ModModel model, List<String> imgs, HashMap<String, StadsBasic> datos, int tipo) {
+    public  List<Annotation> detectObjects(ModModel model, List<String> imgs, HashMap<String, StadsBasic> datos, int tipo) {
         List<Annotation> res = new ArrayList();
-        Net net = ((YoloModel) model).getNet();
+        AbstractMap.SimpleEntry<Net,Boolean> net = ((YoloModel) model).getNet();
         //net=null;
-        if (net == null) {
+        if (net.getKey() == null) {
             System.out.println("CARGO MODELO YOLO1:" + (String) model.getWeightModel());
-            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
-            net.setPreferableBackend(DNN_BACKEND);
-            net.setPreferableTarget(DNN_TARGET);
+//            (Boolean.FALSE) = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
+//            net.setPreferableBackend(DNN_BACKEND);
+//            net.setPreferableTarget(DNN_TARGET);
         }
+        
         Mat frame = null;
         Mat blob = null;
 
@@ -84,10 +86,10 @@ public class SRCYolo extends ModeloGrafico {
                 Annotation an = new Annotation();
                 an.getFilename().setItem(im);
                 final String filename = im;
-                BufferedImage img = ImageIO.read(new File(filename));
-                if (img.getType() != BufferedImage.TYPE_3BYTE_BGR) {
-                    throw new IOException(String.format("Expected 3-byte BGR encoding in BufferedImage, found %d (file: %s). This code could be made more robust", img.getType(), filename));
-                }
+//                BufferedImage img = ImageIO.read(new File(filename));
+//                if (img!=null && img.getType() != BufferedImage.TYPE_3BYTE_BGR) {
+//                    throw new IOException(String.format("Expected 3-byte BGR encoding in BufferedImage, found %d (file: %s). This code could be made more robust", img.getType(), filename));
+//                }
 
                 frame = imread(im, org.opencv.imgcodecs.Imgcodecs.IMREAD_COLOR);//CV_LOAD_IMAGE_UNCHANGED);
                 Size size = new Size(IN_WIDTH, IN_HEIGHT);
@@ -95,11 +97,11 @@ public class SRCYolo extends ModeloGrafico {
                 an.setAlto(frame.height());
                 an.setAncho(frame.width());
                 blob = Dnn.blobFromImage(frame, (1.0 / 255.0), size, scalar, true, false);
-                net.setInput(blob);
+                net.getKey().setInput(blob);
 
                 List<Mat> outs = new ArrayList<>();
-                List<String> names = getOutputsNames(net);
-                net.forward(outs, names);
+                List<String> names = getOutputsNames(net.getKey());
+                net.getKey().forward(outs, names);
                 Postprocess((YoloModel) model, an, frame, outs, filename, datos, tipo);
 
                 res.add(an);
@@ -107,6 +109,7 @@ public class SRCYolo extends ModeloGrafico {
             } catch (Exception e) {
                 System.out.println("ERROR EJECUCION MODELO TIPO YOLO:" + e);
             } finally {
+               
                 if (frame != null) {
                     frame.release();
 
@@ -119,7 +122,7 @@ public class SRCYolo extends ModeloGrafico {
 //          System.out.println(e);
             }
         }
-
+         net.setValue(Boolean.FALSE);
         return res;
     }
 
@@ -311,13 +314,13 @@ public class SRCYolo extends ModeloGrafico {
     }
 
     public Bndbox detectObjects(ModModel model, Mat frame, String nameImg, HashMap<String, StadsBasic> datos, int tipo) {
-        Net net = ((YoloModel) model).getNet();
+         AbstractMap.SimpleEntry<Net,Boolean>  net = ((YoloModel) model).getNet();
 
         if (net == null) {
             System.out.println("CARGO MODELO YOLO2:" + (String) model.getWeightModel());
-            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
-            net.setPreferableBackend(DNN_BACKEND);
-            net.setPreferableTarget(DNN_TARGET);
+//            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
+//            net.setPreferableBackend(DNN_BACKEND);
+//            net.setPreferableTarget(DNN_TARGET);
         }
 
         Annotation an = new Annotation();
@@ -330,11 +333,11 @@ public class SRCYolo extends ModeloGrafico {
             an.setAlto(frame.height());
             an.setAncho(frame.width());
             blob = Dnn.blobFromImage(frame, (1.0 / 255.0), size, scalar, true, false);
-            net.setInput(blob);
+            net.getKey().setInput(blob);
 
             List<Mat> outs = new ArrayList<>();
-            List<String> names = getOutputsNames(net);
-            net.forward(outs, names);
+            List<String> names = getOutputsNames(net.getKey());
+            net.getKey().forward(outs, names);
             Postprocess((YoloModel) model, an, frame, outs, nameImg, datos, tipo);
 
             for (Objeto obj : an.getObject()) {
@@ -349,7 +352,7 @@ public class SRCYolo extends ModeloGrafico {
         } catch (Exception e) {
             System.out.println(e);
         } finally {
-
+            net.setValue(Boolean.FALSE);
             if (blob != null) {
                 blob.release();
 
@@ -360,14 +363,14 @@ public class SRCYolo extends ModeloGrafico {
         return res;
     }
 
-    public Annotation detectObjects(ModModel model, String img, int tipo) {
-        Net net = ((YoloModel) model).getNet();
+    public  Annotation detectObjects(ModModel model, String img, int tipo) {
+         AbstractMap.SimpleEntry<Net,Boolean>  net = ((YoloModel) model).getNet();
         // net=null;
         if (net == null) {
             System.out.println("CARGO MODELO YOLO3:" + (String) model.getWeightModel());
-            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
-            net.setPreferableBackend(DNN_BACKEND);
-            net.setPreferableTarget(DNN_TARGET);
+//            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
+//            net.setPreferableBackend(DNN_BACKEND);
+//            net.setPreferableTarget(DNN_TARGET);
         }
 
         Annotation an = new Annotation();
@@ -381,11 +384,11 @@ public class SRCYolo extends ModeloGrafico {
                 an.setAlto(frame.height());
                 an.setAncho(frame.width());
                 blob = Dnn.blobFromImage(frame, (1.0 / 255.0), size, scalar, true, false);
-                net.setInput(blob);
+                net.getKey().setInput(blob);
 
                 List<Mat> outs = new ArrayList<>();
-                List<String> names = getOutputsNames(net);
-                net.forward(outs, names);
+                List<String> names = getOutputsNames(net.getKey());
+                net.getKey().forward(outs, names);
                 Postprocess((YoloModel) model, an, frame, outs, img, new HashMap(), tipo);
             } else {
                 System.out.println("ERROR: IMAGEN NO ENCONTRADA");
@@ -394,6 +397,7 @@ public class SRCYolo extends ModeloGrafico {
         } catch (Exception e) {
             System.out.println(e);
         } finally {
+            net.setValue(Boolean.FALSE);
             if (frame != null) {
                 frame.release();
 
@@ -409,7 +413,7 @@ public class SRCYolo extends ModeloGrafico {
         return an;
     }
 
-    public Bndbox detectObject(Net net, List<item> items, Mat frame, String nameImg, HashMap<String, StadsBasic> datos, int tipo, double minScore) {
+    public Bndbox detectObject(AbstractMap.SimpleEntry<Net,Boolean> net, List<item> items, Mat frame, String nameImg, HashMap<String, StadsBasic> datos, int tipo, double minScore) {
 
         Annotation an = new Annotation();
         Bndbox res = new Bndbox();
@@ -422,11 +426,11 @@ public class SRCYolo extends ModeloGrafico {
             an.setAlto(frame.height());
             an.setAncho(frame.width());
             blob = Dnn.blobFromImage(frame, (1.0 / 255.0), size, scalar, true, false);
-            net.setInput(blob);
+            net.getKey().setInput(blob);
 
             List<Mat> outs = new ArrayList<>();
-            List<String> names = getOutputsNames(net);
-            net.forward(outs, names);
+            List<String> names = getOutputsNames(net.getKey());
+            net.getKey().forward(outs, names);
             Postprocess(items, an, frame, outs, nameImg, datos, tipo, minScore);
 
             for (Objeto obj : an.getObject()) {
@@ -442,6 +446,7 @@ public class SRCYolo extends ModeloGrafico {
         } catch (Exception e) {
             //          System.out.println(e);
         } finally {
+            net.setValue(Boolean.FALSE);
             if (blob != null) {
                 blob.release();
 
