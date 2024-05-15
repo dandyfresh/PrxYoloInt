@@ -24,6 +24,8 @@ import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.imageio.ImageIO;
 import org.opencv.core.Core;
 import org.opencv.core.Core.MinMaxLocResult;
@@ -56,7 +58,7 @@ public class SRCYolo extends ModeloGrafico {
     public void Init(String path) {
         File f = new File(path);
         if (!f.exists()) {
-            //          System.out.println("NO EXISTE LIBRERIA OPENCV:" + path);
+            //          Logger.getLogger("DETECT").log(Level.FINER, "NO EXISTE LIBRERIA OPENCV:" + path);
         }
         try {
             System.load(path);
@@ -67,20 +69,20 @@ public class SRCYolo extends ModeloGrafico {
     }
 
     @Override
-    public  List<Annotation> detectObjects(ModModel model, List<String> imgs, HashMap<String, StadsBasic> datos, int tipo) {
+    public List<Annotation> detectObjects(ModModel model, List<String> imgs, HashMap<String, StadsBasic> datos, int tipo) {
         List<Annotation> res = new ArrayList();
-        AbstractMap.SimpleEntry<Net,Boolean> net = ((YoloModel) model).getNet();
+        AbstractMap.SimpleEntry<Net, Boolean> net = ((YoloModel) model).getNet();
         //net=null;
         if (net.getKey() == null) {
-            System.out.println("CARGO MODELO YOLO1:" + (String) model.getWeightModel());
+            Logger.getLogger("DETECT").log(Level.FINER, "CARGO MODELO YOLO1:" + (String) model.getWeightModel());
 //            (Boolean.FALSE) = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
 //            net.setPreferableBackend(DNN_BACKEND);
 //            net.setPreferableTarget(DNN_TARGET);
         }
-        
+
         Mat frame = null;
         Mat blob = null;
-
+        int n_img = 0;
         for (String im : imgs) {
             try {
                 Annotation an = new Annotation();
@@ -103,13 +105,15 @@ public class SRCYolo extends ModeloGrafico {
                 List<String> names = getOutputsNames(net.getKey());
                 net.getKey().forward(outs, names);
                 Postprocess((YoloModel) model, an, frame, outs, filename, datos, tipo);
-
+                Logger.getLogger("DETECT").log(Level.FINER, "IMAGEN:" + n_img + ",DE:" + imgs.size());
+                n_img++;
                 res.add(an);
 
             } catch (Exception e) {
-                System.out.println("ERROR EJECUCION MODELO TIPO YOLO:" + e);
+                Logger.getLogger("DETECT").log(Level.SEVERE, "ERROR EJECUCION MODELO TIPO YOLO:IMG" + im + ":E:" + e );
+               // e.printStackTrace();
             } finally {
-               
+
                 if (frame != null) {
                     frame.release();
 
@@ -122,7 +126,7 @@ public class SRCYolo extends ModeloGrafico {
 //          System.out.println(e);
             }
         }
-         net.setValue(Boolean.FALSE);
+        net.setValue(Boolean.FALSE);
         return res;
     }
 
@@ -133,112 +137,117 @@ public class SRCYolo extends ModeloGrafico {
     }
 
     Annotation Postprocess(List<item> items, Annotation an, Mat frame, List<Mat> outs, String filename, HashMap<String, StadsBasic> datos, int tipo, double min_prob) {
-        List<Integer> classIds = new ArrayList<>();
-        List<Float> confidences = new ArrayList<>();
-        List<Rect2d> boxes = new ArrayList<>();
 
-        for (Mat out : outs) {
-            for (int j = 0; j < out.rows(); j++) {
-                Mat scores = out.row(j).colRange(5, out.cols());
-                MinMaxLocResult maxLoc = Core.minMaxLoc(scores);
-                Point classIdPoint = maxLoc.maxLoc;
-                double confidence = maxLoc.maxVal;
-                if (confidence >= min_prob) {
+        try {
+            List<Integer> classIds = new ArrayList<>();
+            List<Float> confidences = new ArrayList<>();
+            List<Rect2d> boxes = new ArrayList<>();
 
-                    int centerX = (int) (out.get(j, 0)[0] * frame.cols());
-                    int centerY = (int) (out.get(j, 1)[0] * frame.rows());
-                    int width = (int) (out.get(j, 2)[0] * frame.cols());
-                    int height = (int) (out.get(j, 3)[0] * frame.rows());
-                    int left = centerX - width / 2;
-                    int top = centerY - height / 2;
+            for (Mat out : outs) {
+                for (int j = 0; j < out.rows(); j++) {
+                    Mat scores = out.row(j).colRange(5, out.cols());
+                    MinMaxLocResult maxLoc = Core.minMaxLoc(scores);
+                    Point classIdPoint = maxLoc.maxLoc;
+                    double confidence = maxLoc.maxVal;
+                    if (confidence >= min_prob) {
 
-                    classIds.add((int) classIdPoint.x);
-                    confidences.add((float) confidence);
-                    boxes.add(new Rect2d(left, top, width, height));
-                }
-            }
-            out.release();
-        }
+                        int centerX = (int) (out.get(j, 0)[0] * frame.cols());
+                        int centerY = (int) (out.get(j, 1)[0] * frame.rows());
+                        int width = (int) (out.get(j, 2)[0] * frame.cols());
+                        int height = (int) (out.get(j, 3)[0] * frame.rows());
+                        int left = centerX - width / 2;
+                        int top = centerY - height / 2;
 
-        // Perform non maximum suppression to eliminate redundant overlapping boxes with
-        // lower confidences
-        MatOfInt MatIndices = new MatOfInt();
-        MatOfRect2d matRectBoxes = new MatOfRect2d(boxes.toArray(new Rect2d[boxes.size()]));
-        float[] floatConfidences = new float[confidences.size()];
-        for (int i = 0; i < confidences.size(); i++) {
-            floatConfidences[i] = confidences.get(i);
-        }
-        MatOfFloat matFloat = new MatOfFloat(floatConfidences);
-        Dnn.NMSBoxes(matRectBoxes, matFloat, confThreshold, nmsThreshold, MatIndices);
-        if (MatIndices.rows() > 0) {
-            List<Integer> indices = MatIndices.toList();
-            for (int i = 0; i < indices.size(); i++) {
-                int idx = indices.get(i);
-                String cn = items.get(classIds.get(idx)).getName();
-                Rect2d box = boxes.get(idx);
-                int ind = an.getIndxObj(cn);
-                StadsBasic sb = datos.get(cn);
-                boolean add = true;
-
-                if (sb==null ||(sb != null && (sb.getAnchoMin() == 0 || box.width >= sb.getAnchoMin()) && (sb.getAltoMin() == 0 || box.height >= sb.getAltoMin()))) {
-                    
-                    if (ind < 0) {
-                        Objeto ob = new Objeto();
-                        ob.setName(cn);
-                        if (sb != null) {
-                            ob.setLabel(datos.get(ob.getName()).getLabel());
-                        } else {
-                            ob.setLabel(cn);
-                        }
-                        ob.setTipo(tipo);
-                        an.getObject().add(ob);
-                        ind = an.getObject().size() - 1;
-                    } else {
-                        if (sb != null) {
-                            an.getObject().get(ind).setLabel(sb.getLabel());
-                        } else {
-                            an.getObject().get(ind).setLabel(an.getObject().get(ind).getName());
-                        }
+                        classIds.add((int) classIdPoint.x);
+                        confidences.add((float) confidence);
+                        boxes.add(new Rect2d(left, top, width, height));
                     }
-                    Bndbox bn = new Bndbox();
-                    bn.setScore(confidences.get(idx));
-                    bn.setId(cn);
-                    bn.setDesc(an.getObject().get(ind).getLabel());
-                    bn.setXmin((int) (box.x < 0 ? 0 : ((box.x > frame.width()) ? frame.width() : box.x)));
-                    bn.setYmin((int) (box.y < 0 ? 0 : ((box.y > frame.height()) ? frame.height() : box.y)));
-                    bn.setXmax((int) ((bn.getXmin() + box.width) > frame.width() ? frame.width() : (bn.getXmin() + box.width)));
-                    bn.setYmax((int) ((bn.getYmin() + box.height) > frame.height() ? frame.height() : (bn.getYmin() + box.height)));
-                    bn.setTipo(tipo);
-                    if ((bn.getAncho() >= Constantes.MIN_PIX_BNB && bn.getAlto() >= Constantes.MIN_PIX_BNB)) {
-                        double prop = 1;
+                }
+                out.release();
+            }
 
-                        if (sb != null&& sb.getAnchoMin() == sb.getAltoMin() && sb.getAnchoMin() != 0) {
-                            if (bn.getAncho() > bn.getAlto()) {
-                                int dif = bn.getAncho() - bn.getAlto() / 2;
-                                bn.setXmin(bn.getXmin()+dif);
-                                bn.setXmax(bn.getXmax()-dif);
-                            }else if(bn.getAncho() < bn.getAlto()){
-                                int dif = (bn.getAlto() - bn.getAncho()) / 2;
-                                bn.setYmin(bn.getYmin()+dif);
-                                bn.setYmax(bn.getYmax()-dif);
-                            }
-                        }
+            // Perform non maximum suppression to eliminate redundant overlapping boxes with
+            // lower confidences
+            MatOfInt MatIndices = new MatOfInt();
+            MatOfRect2d matRectBoxes = new MatOfRect2d(boxes.toArray(new Rect2d[boxes.size()]));
+            float[] floatConfidences = new float[confidences.size()];
+            for (int i = 0; i < confidences.size(); i++) {
+                floatConfidences[i] = confidences.get(i);
+            }
+            MatOfFloat matFloat = new MatOfFloat(floatConfidences);
+            Dnn.NMSBoxes(matRectBoxes, matFloat, confThreshold, nmsThreshold, MatIndices);
+            if (MatIndices.rows() > 0) {
+                List<Integer> indices = MatIndices.toList();
+                for (int i = 0; i < indices.size(); i++) {
+                    int idx = indices.get(i);
+                    String cn = items.get(classIds.get(idx)).getName();
+                    Rect2d box = boxes.get(idx);
+                    int ind = an.getIndxObj(cn);
+                    StadsBasic sb = datos.get(cn);
+                    boolean add = true;
 
-                        if (sb != null) {
-                            if (bn.getOrient() == Constantes.OR_HOR) {
-                                prop = sb.getStdsObj().getAvgArmW(sb.getOrient());
+                    if (sb == null || (sb != null && (sb.getAnchoMin() == 0 || box.width >= sb.getAnchoMin()) && (sb.getAltoMin() == 0 || box.height >= sb.getAltoMin()))) {
+
+                        if (ind < 0) {
+                            Objeto ob = new Objeto();
+                            ob.setName(cn);
+                            if (sb != null) {
+                                ob.setLabel(datos.get(ob.getName()).getLabel());
                             } else {
-                                prop = sb.getStdsObj().getAvgArmH(sb.getOrient());
+                                ob.setLabel(cn);
+                            }
+                            ob.setTipo(tipo);
+                            an.getObject().add(ob);
+                            ind = an.getObject().size() - 1;
+                        } else {
+                            if (sb != null) {
+                                an.getObject().get(ind).setLabel(sb.getLabel());
+                            } else {
+                                an.getObject().get(ind).setLabel(an.getObject().get(ind).getName());
                             }
                         }
-                        an.getObject().get(ind).addBndbox(bn, 1, prop);
-                        System.out.printf("\tFound %s \t (score: %.4f) \t (xmin: " + bn.getXmin() + " \t ymin: " + bn.getYmin() + " \t xmax: " + bn.getXmax() + " \t ymax: " + bn.getYmax() + ")\n", cn, confidences.get(idx));
-                    }
+                        Bndbox bn = new Bndbox();
+                        bn.setScore(confidences.get(idx));
+                        bn.setId(cn);
+                        bn.setDesc(an.getObject().get(ind).getLabel());
+                        bn.setXmin((int) (box.x < 0 ? 0 : ((box.x > frame.width()) ? frame.width() : box.x)));
+                        bn.setYmin((int) (box.y < 0 ? 0 : ((box.y > frame.height()) ? frame.height() : box.y)));
+                        bn.setXmax((int) ((bn.getXmin() + box.width) > frame.width() ? frame.width() : (bn.getXmin() + box.width)));
+                        bn.setYmax((int) ((bn.getYmin() + box.height) > frame.height() ? frame.height() : (bn.getYmin() + box.height)));
+                        bn.setTipo(tipo);
+                        if ((bn.getAncho() >= Constantes.MIN_PIX_BNB && bn.getAlto() >= Constantes.MIN_PIX_BNB)) {
+                            double prop = 1;
 
+                            if (sb != null && sb.getAnchoMin() == sb.getAltoMin() && sb.getAnchoMin() != 0) {
+                                if (bn.getAncho() > bn.getAlto()) {
+                                    int dif = bn.getAncho() - bn.getAlto() / 2;
+                                    bn.setXmin(bn.getXmin() + dif);
+                                    bn.setXmax(bn.getXmax() - dif);
+                                } else if (bn.getAncho() < bn.getAlto()) {
+                                    int dif = (bn.getAlto() - bn.getAncho()) / 2;
+                                    bn.setYmin(bn.getYmin() + dif);
+                                    bn.setYmax(bn.getYmax() - dif);
+                                }
+                            }
+
+                            if (sb != null) {
+                                if (bn.getOrient() == Constantes.OR_HOR) {
+                                    prop = sb.getStdsObj().getAvgArmW(sb.getOrient());
+                                } else {
+                                    prop = sb.getStdsObj().getAvgArmH(sb.getOrient());
+                                }
+                            }
+                            an.getObject().get(ind).addBndbox(bn, 1, prop);
+                            Logger.getLogger("DETECT").log(Level.FINER, "\tFound " + cn + " \t (score: " + confidences.get(idx) + ") \t (xmin: " + bn.getXmin() + " \t ymin: " + bn.getYmin() + " \t xmax: " + bn.getXmax() + " \t ymax: " + bn.getYmax() + ")\n");
+                        }
+
+                    }
                 }
+            } else {
+                //          Logger.getLogger("DETECT").log(Level.FINER, "No se encuentran objetos dentro de la imagen: " + filename);
             }
-        } else {
-            //          System.out.println("No se encuentran objetos dentro de la imagen: " + filename);
+        } catch (Exception e) {
+            Logger.getLogger("DETECT").log(Level.WARNING, "ERROR:YOLO:POSTPROCES:IMG" + filename + ":E:" + e);
         }
 
         return an;
@@ -314,10 +323,10 @@ public class SRCYolo extends ModeloGrafico {
     }
 
     public Bndbox detectObjects(ModModel model, Mat frame, String nameImg, HashMap<String, StadsBasic> datos, int tipo) {
-         AbstractMap.SimpleEntry<Net,Boolean>  net = ((YoloModel) model).getNet();
+        AbstractMap.SimpleEntry<Net, Boolean> net = ((YoloModel) model).getNet();
 
         if (net == null) {
-            System.out.println("CARGO MODELO YOLO2:" + (String) model.getWeightModel());
+            Logger.getLogger("DETECT").log(Level.FINER, "CARGO MODELO YOLO2:" + (String) model.getWeightModel());
 //            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
 //            net.setPreferableBackend(DNN_BACKEND);
 //            net.setPreferableTarget(DNN_TARGET);
@@ -350,7 +359,7 @@ public class SRCYolo extends ModeloGrafico {
             }
 
         } catch (Exception e) {
-            System.out.println(e);
+            Logger.getLogger("DETECT").log(Level.SEVERE, "ERROR:YOLO" + e);
         } finally {
             net.setValue(Boolean.FALSE);
             if (blob != null) {
@@ -363,11 +372,11 @@ public class SRCYolo extends ModeloGrafico {
         return res;
     }
 
-    public  Annotation detectObjects(ModModel model, String img, int tipo) {
-         AbstractMap.SimpleEntry<Net,Boolean>  net = ((YoloModel) model).getNet();
+    public Annotation detectObjects(ModModel model, String img, int tipo) {
+        AbstractMap.SimpleEntry<Net, Boolean> net = ((YoloModel) model).getNet();
         // net=null;
         if (net == null) {
-            System.out.println("CARGO MODELO YOLO3:" + (String) model.getWeightModel());
+            Logger.getLogger("DETECT").log(Level.FINER, "CARGO MODELO YOLO3:" + (String) model.getWeightModel());
 //            net = Dnn.readNetFromDarknet(model.getConfigModelPath(), (String) model.getWeightModel());
 //            net.setPreferableBackend(DNN_BACKEND);
 //            net.setPreferableTarget(DNN_TARGET);
@@ -391,7 +400,7 @@ public class SRCYolo extends ModeloGrafico {
                 net.getKey().forward(outs, names);
                 Postprocess((YoloModel) model, an, frame, outs, img, new HashMap(), tipo);
             } else {
-                System.out.println("ERROR: IMAGEN NO ENCONTRADA");
+                Logger.getLogger("DETECT").log(Level.SEVERE, "ERROR: IMAGEN NO ENCONTRADA");
             }
 
         } catch (Exception e) {
@@ -413,7 +422,7 @@ public class SRCYolo extends ModeloGrafico {
         return an;
     }
 
-    public Bndbox detectObject(AbstractMap.SimpleEntry<Net,Boolean> net, List<item> items, Mat frame, String nameImg, HashMap<String, StadsBasic> datos, int tipo, double minScore) {
+    public Bndbox detectObject(AbstractMap.SimpleEntry<Net, Boolean> net, List<item> items, Mat frame, String nameImg, HashMap<String, StadsBasic> datos, int tipo, double minScore) {
 
         Annotation an = new Annotation();
         Bndbox res = new Bndbox();
