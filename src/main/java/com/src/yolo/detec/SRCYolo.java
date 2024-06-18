@@ -39,6 +39,7 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.dnn.Dnn;
 import org.opencv.dnn.Net;
+import static org.opencv.imgcodecs.Imgcodecs.IMREAD_COLOR;
 import static org.opencv.imgcodecs.Imgcodecs.IMREAD_UNCHANGED;
 import static org.opencv.imgcodecs.Imgcodecs.imread;
 
@@ -386,7 +387,7 @@ public class SRCYolo extends ModeloGrafico {
         Mat frame = null;
         Mat blob = null;
         try {
-            frame = imread(img, IMREAD_UNCHANGED);
+            frame = imread(img, IMREAD_COLOR);
             if (frame != null && !frame.empty()) {
                 Size size = new Size(IN_WIDTH, IN_HEIGHT);
                 Scalar scalar = new Scalar(0, 0, 0);
