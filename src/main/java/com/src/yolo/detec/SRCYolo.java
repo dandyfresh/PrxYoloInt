@@ -52,8 +52,8 @@ public class SRCYolo extends ModeloGrafico {
     public static float confThreshold = 0.15f; // Confidence threshold
     public static float nmsThreshold = 0.1f;  // Non-maximum suppression threshold
     //To Resize Images
-    public static final int IN_WIDTH = 416;
-    public static final int IN_HEIGHT = 416;
+    public static final int IN_WIDTH = 608;
+    public static final int IN_HEIGHT = 608;
 
     @Override
     public void Init(String path) {
@@ -222,12 +222,12 @@ public class SRCYolo extends ModeloGrafico {
                             if (sb != null && sb.getAnchoMin() == sb.getAltoMin() && sb.getAnchoMin() != 0) {
                                 if (bn.getAncho() > bn.getAlto()) {
                                     int dif = bn.getAncho() - bn.getAlto() / 2;
-                                    bn.setXmin(bn.getXmin() + dif);
-                                    bn.setXmax(bn.getXmax() - dif);
+                                    bn.setXmin(bn.getXmin() - dif);
+                                    bn.setXmax(bn.getXmax() + dif);
                                 } else if (bn.getAncho() < bn.getAlto()) {
                                     int dif = (bn.getAlto() - bn.getAncho()) / 2;
-                                    bn.setYmin(bn.getYmin() + dif);
-                                    bn.setYmax(bn.getYmax() - dif);
+                                    bn.setYmin(bn.getYmin() - dif);
+                                    bn.setYmax(bn.getYmax() + dif);
                                 }
                             }
 
